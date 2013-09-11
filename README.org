@@ -1,0 +1,1 @@
+* Simple Poshmark scraper built with scrapy
