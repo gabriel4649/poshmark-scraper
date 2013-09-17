@@ -24,7 +24,8 @@ class PoshSpider(CrawlSpider):
                   'http://poshmark.com/category/Shoes',
                   'http://poshmark.com/category/Sweaters',
                   'http://poshmark.com/category/Tops',
-                  'http://poshmark.com/category/Other']
+                  'http://poshmark.com/category/Other',
+                  'http://poshmark.com/parties']
 
     # Rules on what the scraper should do with the links it finds
     rules = (
@@ -34,7 +35,18 @@ class PoshSpider(CrawlSpider):
                                callback='parse_listing'),
         # Process user profiles
         Rule(SgmlLinkExtractor(allow='closet/[a-z0-9]+'),
-             callback='parse_profile')
+             callback='parse_profile'),
+        # Follow parties for listing links
+        Rule(SgmlLinkExtractor(allow='party/[a-z0-9]+')),
+        # Let's see more parties
+        # http://poshmark.com/parties?last_event_id=522e58197aea0b062208ddba&last_event_time=2013-09-10T16%3A00%3A00Z
+        Rule(SgmlLinkExtractor(allow='parties\?.*')),
+        # Let's see more of that party
+        # http://poshmark.com/party/5234f11682fe0659d402d8f0?max_id=1379278800.335
+        Rule(SgmlLinkExtractor(allow='party/[a-z0-9]+\?max_id=.*')),
+        # I want MOAR listings
+        #http://poshmark.com/category/Accessories?max_id=2
+        Rule(SgmlLinkExtractor(allow='category/.*')),
       )
 
     def parse_listing(self, response):
@@ -94,9 +106,17 @@ class PoshSpider(CrawlSpider):
         details = hxs.select("//div[@class='item-details-widget']")
         pp['title'] = get(details, ".//h4/text()")
         pp['description'] = get(hxs, "//div[@class='description']/text()")
+        pp['date'] = get(details, ".//span[@class='context']/text()").split('Posted ')[1]
         pp['size'] = get(details, ".//li[@class='size']/a/text()")
         pp['brand'] = get(details, ".//li[@class='brand']/a/text()")
         pp['price'] = get(details, ".//span[@class='actual']/text()")
+
+        if get(details, ".//span[@class='sprite sold-tag']"):
+            sold = "Yes"
+        else:
+            sold = "No"
+
+        pp['sold'] = sold
         pp['comments'] = comments
         pp['number_of_comments'] = len(comments)
 
@@ -118,11 +138,12 @@ class PoshSpider(CrawlSpider):
 
         return pp
 
-    def parse_start_url(self, response):
-        for url in self.start_urls:
-            for i in range(1, 120):
-                page = '?max_id=' + str(i) + '&page=' + str(i)
-                yield Request(url + page, self.parse)
+    # def parse_start_url(self, response):
+    #     for url in self.start_urls:
+    #         if not 'parties' in url:
+    #             for i in range(1, 120):
+    #                 page = '?max_id=' + str(i) + '&page=' + str(i)
+    #                 yield Request(url + page, self.parse)
 
     # Let's initialize the classes we are inheriting from.
     def __init__(self):
