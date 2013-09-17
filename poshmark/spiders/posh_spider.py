@@ -2,7 +2,8 @@ from scrapy.contrib.spiders import CrawlSpider, Rule
 from scrapy.contrib.linkextractors.sgml import SgmlLinkExtractor
 from scrapy.selector import HtmlXPathSelector
 from scrapy.http import Request
-from poshmark.items import PoshmarkPost
+from poshmark.items import PoshmarkPost, PoshmarkProfile
+from datetime import datetime, timedelta
 
 class PoshSpider(CrawlSpider):
     # Here goes the crawler name
@@ -31,12 +32,15 @@ class PoshSpider(CrawlSpider):
         Rule(SgmlLinkExtractor(allow='listing/[a-z0-9]+',
                                deny='like'),
                                callback='parse_listing'),
+        # Process user profiles
+        Rule(SgmlLinkExtractor(allow='closet/[a-z0-9]+'),
+             callback='parse_profile')
       )
 
     def parse_listing(self, response):
         """
         This function parses a single Poshmark listing. Some contracts
-        are mingled with this docstring.
+        are mingled with this doc string.
 
         @url http://poshmark.com/listing/51cb4195bdf51c5c9d02cd28
         @returns items 1 1
@@ -47,15 +51,43 @@ class PoshSpider(CrawlSpider):
         hxs = HtmlXPathSelector(response)
         hxs_comments = hxs.select("//div[@class='listing-comments-con']/div[@class='item comment']")
 
-        get = lambda obj, str: safe_list_get(obj.select(str).extract(), 0)
-
         comments = []
 
         for comment in hxs_comments:
             pcomment = {}
             pcomment['username'] = get(comment, ".//a[@class='grey commentor']/text()")
             pcomment['comment'] = get(comment, "text()")
-            pcomment['date'] = get(comment, ".//small/text()")
+            raw_date = get(comment, ".//small/descendant-or-self::*/text()")
+            #Jul 18 10:43AM
+            time_string = "%b %d %I:%M%p"
+            get_time_obj = lambda x: datetime.strptime(x, time_string)
+
+            if 'ago' in raw_date:
+                try:
+                    n_ago = int(raw_date.split()[0])
+                except:
+                    if 'yesterday' in raw_date:
+                        delta = timedelta(days=1)
+                    if 'second' in raw_date:
+                        delta = timedelta(seconds=1)
+                    if 'hour' in raw_date:
+                        delta = timedelta(hours=1)
+
+                if 'seconds' in raw_date:
+                    delta = timedelta(seconds=n_ago)
+                elif 'minutes' in raw_date:
+                    delta = timedelta(minutes=n_ago)
+                elif 'hours' in raw_date:
+                    delta = timedelta(hours=n_ago)
+                elif 'days' in raw_date:
+                    delta = timedelta(days=n_ago)
+
+                date = datetime.now() - delta
+                date = date.strftime(time_string)
+            else:
+                date = raw_date
+
+            pcomment['date'] = date
             comments.append(pcomment)
 
         pp = PoshmarkPost()
@@ -66,12 +98,29 @@ class PoshSpider(CrawlSpider):
         pp['brand'] = get(details, ".//li[@class='brand']/a/text()")
         pp['price'] = get(details, ".//span[@class='actual']/text()")
         pp['comments'] = comments
+        pp['number_of_comments'] = len(comments)
 
-        yield pp
+        likers = hxs.select("//div[@class='listing-likes-con']/span/a/text()").extract()
+        pp['likers'] = likers
+        pp['likes'] = len(likers)
+        pp['url'] = response.url
+
+        return pp
+
+    def parse_profile(self, response):
+        hxs = HtmlXPathSelector(response)
+
+        pp = PoshmarkProfile()
+        pp['user_name'] = get(hxs, "//h4[@class='user-name']/text()")
+        pp['listings'], pp['followers'], pp['following'] = hxs.select("//ul[@class='pipe2']/li/a/strong/text()").extract()
+        pp['location'] = get(hxs, "//span[@class='city']/text()")
+        pp['website'] = get(hxs, "//div[@class='web-site-con']/a/@href")
+
+        return pp
 
     def parse_start_url(self, response):
         for url in self.start_urls:
-            for i in range(1, 10):
+            for i in range(1, 120):
                 page = '?max_id=' + str(i) + '&page=' + str(i)
                 yield Request(url + page, self.parse)
 
@@ -84,3 +133,6 @@ def safe_list_get(l, idx, default=''):
         return l[idx]
     except IndexError:
         return default
+
+def get(obj, str):
+    return safe_list_get(obj.select(str).extract(), 0)

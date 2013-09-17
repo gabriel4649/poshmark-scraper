@@ -12,3 +12,15 @@ class PoshmarkPost(Item):
     size = Field()
     price = Field()
     comments = Field()
+    number_of_comments = Field()
+    likers = Field()
+    likes = Field()
+    url = Field()
+
+class PoshmarkProfile(Item):
+    user_name = Field()
+    listings = Field()
+    followers = Field()
+    following = Field()
+    location = Field()
+    website = Field()
