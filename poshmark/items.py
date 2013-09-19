@@ -26,3 +26,4 @@ class PoshmarkProfile(Item):
     following = Field()
     location = Field()
     website = Field()
+    url = Field()

@@ -135,6 +135,7 @@ class PoshSpider(CrawlSpider):
         pp['listings'], pp['followers'], pp['following'] = hxs.select("//ul[@class='pipe2']/li/a/strong/text()").extract()
         pp['location'] = get(hxs, "//span[@class='city']/text()")
         pp['website'] = get(hxs, "//div[@class='web-site-con']/a/@href")
+        pp['url'] = response.url
 
         return pp
 
